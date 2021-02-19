@@ -1,0 +1,371 @@
+buildscript {
+    ext {
+        projectName = "workflow-front-end"
+    }
+}
+
+
+plugins {
+    id 'org.springframework.boot'
+    id 'com.github.node-gradle.node'
+    id 'maven-publish'
+    id 'java'
+}
+//Generate the project scripts
+
+apply plugin: 'io.spring.dependency-management'
+
+
+node {
+    version = '10.16.3'
+    download = true
+    distBaseUrl = 'http://dhpscnxsrm02.discsrv.co.za:8081/nexus/repository/nodejs-org-dist-raw'
+}
+
+npmSetup {
+    doFirst {
+        args = args + ['--registry', 'http://dhpscnxsrm02.discsrv.co.za:8081/nexus/repository/npm-group/', '--no-bin-links']
+    }
+}
+
+npmInstall.args = ['--no-bin-links']
+
+
+sourceCompatibility = 1.8
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.projectlombok:lombok'
+    implementation('io.springfox:springfox-swagger2:2.9.2') {
+        exclude group: 'org.mapstruct', module: 'mapstruct'
+    }
+    implementation 'io.springfox:springfox-swagger-ui:2.9.2'
+    implementation 'org.springframework.data:spring-data-commons'
+    implementation 'joda-time:joda-time:2.9.4'
+    implementation 'commons-io:commons-io:2.6'
+    annotationProcessor 'org.projectlombok:lombok:1.18.12'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.12'
+}
+
+def _isGenerate = !file("./${projectName}").exists();
+
+def _isGenerateSpringProject = !file("./${projectName}/apps/ui/ui-server").exists();
+
+tasks.whenTaskAdded {
+    task ->
+        if (!_isGenerate) {
+
+            if (task.name.contains("generateUi")) {
+                println "removing " + task.name
+                task.enabled = false
+            }
+        }
+
+        if (!_isGenerateSpringProject) {
+
+            if (task.name.contains("generateSpring")) {
+                println "removing " + task.name
+                task.enabled = false
+            }
+        }
+}
+
+task generateSpringDashBoard(type: Exec) {
+//Requires SpringCli
+//    doLast {
+    description "creating a spring starter for generating the deployment"
+    workingDir = "./${projectName}/apps/ui";
+    commandLine("spring",
+        "init",
+        "--dependencies=web",
+        "--boot-version=2.2.5.RELEASE",
+        "--build=gradle",
+        "--java-version=1.8",
+        "--language=java",
+        "--packaging=jar",
+        "--package-name=za.co.discovery.health.analytics",
+        "--groupId=za.co.discovery.health.analytics",
+        "--description=Launcher",
+        "--name=[UI]",
+        "--artifactId=analyticsUi",
+        "--version=1.0.0-SNAPSHOT",
+        "ui/workflow-front-end")
+
+    //store the output instead of printing to the console:
+
+//    def file = file("./${projectName}/apps/ui/ui-server");
+
+    doLast {
+        def dirName = "./${projectName}/apps/ui/ui-server" as Object;
+
+        file(dirName).list().each {
+            f ->
+                if (!((f == "src") || (f == "build.gradle"))) {
+                    delete "${dirName}/${f}"
+                }
+        }
+    }
+}
+
+
+task generateUiWorkspace(type: NpxTask) {
+    command = 'npx'
+    args = ['create-nx-workspace', "${projectName}", '--preset=empty', '--cli=angular', '--interactive=false', '--nx-cloud=no']
+}
+
+task generateUiApiLibrary(type: NpxTask) {
+    workingDir = file("./${projectName}")
+    command = 'nx'
+    args = ['generate', '@nrwl/angular:library', 'api']
+}
+
+task generateUiAddAngularLibrary(type: NpxTask) {
+    workingDir = file("./${projectName}")
+    command = 'npm'
+    args = ['install', '--save-dev', '@nrwl/angular']
+}
+
+task generateUiWidgetLibrary(type: NpxTask) {
+    workingDir = file("./${projectName}")
+    command = 'nx'
+    args = ['generate', '@nrwl/angular:library', 'shared']
+}
+
+task generateUiDashBoardLibrary(type: NpxTask) {
+    workingDir = file("./${projectName}")
+    command = 'nx'
+    args = ['generate', '@nrwl/angular:application', 'ui/ui-frontend', '--routing']
+}
+
+task generateUiAddDevelopmentLibraries(type: NpmTask) {
+    workingDir = file("./${projectName}")
+//	command = 'npm'
+    args = ['add', '--save-dev', '@compodoc/compodoc',
+            'xml2js',
+            '@angular-devkit/build-ng-packagr',
+            'ng-packagr',
+            'prettier',
+            'git-branch',
+            'jest-sonar-reporter',
+            'pre-commit',
+            'json-server',
+            'ng-packagr',
+            '@schematics/angular',
+            'ng-swagger-gen',
+            '@ngrx/schematics',
+            'npm-run']
+}
+
+task generateUiAddRuntimeLibraries(type: NpmTask) {
+    workingDir = file("./${projectName}")
+//	command = 'npm'
+    args = ['add', '--save', '@nebular/auth',
+            '@nebular/eva-icons',
+            '@nebular/security',
+            '@nebular/theme',
+            '@nebular/auth',
+            '@ngrx/effects',
+            '@ngrx/entity',
+            '@ngrx/router-store',
+            '@ngrx/store',
+            '@ngrx/store-devtools',
+            '@ngrx/data',
+            '@ng-select/ng-select',
+            'eva-icons',
+            'ngx-cookie',
+            'bootstrap',
+            'ngx-bootstrap',
+            '@angular/cdk']
+}
+
+task generateUiProxyContent {
+    doLast {
+        //create working folder mock
+        mkdir "./${projectName}/mock"
+        //create data.json
+        file("./${projectName}/mock/data.json").text = "{  \"userMe\": {\n" +
+            "    \"username\": \"seth@aosafrica.co.za\",\n" +
+            "    \"name\": \"Seth\",\n" +
+            "    \"surname\": \"Thompson\",\n" +
+            "    \"mobile\": \"\",\n" +
+            "    \"phone\": \"+27 31 569 1357\"\n" +
+            "  },}"
+        file("./${projectName}/mock/proxy.conf.json").text = "{\n" +
+            "  \"port\": 3000,\n" +
+            "  \"middlewares\": [\"mock/server.js\"]\n" +
+            "}"
+        file("./${projectName}/mock/routes.json").text = "{\n" +
+            "  \"/api/user/info/me\": \"/userMe\"" +
+            "}"
+        file("./${projectName}/mock/server.js").text = "module.exports = function (req, res, next) {\n" +
+            "  if (req.method === 'POST') {\n" +
+            "    req.method = 'GET'\n" +
+            "    req.query = req.body\n" +
+            "  }\n" +
+            "  next()\n" +
+            "}\n"
+
+
+        def oldFile = file("./${projectName}/package.json")
+        println oldFile.getAbsoluteFile().toString()
+        def newFile = File.createTempFile("package.json", UUID.randomUUID().toString())
+
+        newFile.withWriter { output ->
+            oldFile.eachLine { line ->
+                if (line.contains("start")) {
+                    output.write('\t"start-ui:mock": "ng serve --port 4300 --proxy-config proxy.conf.json",\n')
+                    output.write('\t"mock": "json-server --watch mock/data.json --routes mock/routes.json",\n')
+                }
+                output.write(line)
+                output.write("\n")
+            }
+        }
+        copy {
+            from(newFile.getAbsolutePath())
+            into(oldFile.getParentFile().getAbsolutePath())
+        }
+
+        oldFile.delete();
+        newFile.renameTo(oldFile);
+        newFile.delete();
+    }
+}
+
+task generateUiSwaggerApiContent {
+    doLast {
+        mkdir "./${projectName}/libs/api/build-tools"
+        file("./${projectName}/libs/api/build-tools/generate-client-source.js").text = "const npmRun = require(\"npm-run\");\n" +
+            "const fs = require(\"fs\");\n" +
+            "\n" +
+            "const swaggerConfigs = fs.readdirSync(\"./libs/api/swagger-src\").filter(file => {\n" +
+            "  return file.endsWith(\".json\")\n" +
+            "});\n" +
+            "\n" +
+            "swaggerConfigs.forEach(configFile => {\n" +
+            "  npmRun.exec('ng-swagger-gen --config ./libs/api/swagger-src/' + configFile, {}, (err, stdout, stderr) => {\n" +
+            "    if (err) {\n" +
+            "      console.error(err);\n" +
+            "      console.error(stderr);\n" +
+            "      process.exit(1);\n" +
+            "    }\n" +
+            "\n" +
+            "    console.log(stdout);\n" +
+            "  });\n" +
+            "});\n" +
+            "\n"
+        file("./${projectName}/libs/api/build-tools/update-exports.js").text = "const fs = require(\"fs\");\n" +
+            "\n" +
+            "const projectRootDirectory = './libs/api';\n" +
+            "let libSourceRootDirectory = projectRootDirectory + '/src';\n" +
+            "const moduleRootDirectory = libSourceRootDirectory + '/lib';\n" +
+            "const apiRootDirectory = moduleRootDirectory + '/api';\n" +
+            "\n" +
+            "console.error('apiRootDirectory', apiRootDirectory);\n" +
+            "\n" +
+            "const folders = fs.readdirSync(apiRootDirectory);\n" +
+            "\n" +
+            "folders.forEach(api => {\n" +
+            "\n" +
+            "  let prefix = api.replace(new RegExp('-', 'g'), '');\n" +
+            "\n" +
+            "  let indexFileContent = `import * as \${prefix}Models from './models';\n" +
+            "import * as \${prefix}Services from './services';\n" +
+            "import * as \${prefix}Module from './\${api}-api.module';\n" +
+            "export {\${prefix}Models, \${prefix}Services, \${prefix}Module};`;\n" +
+            "\n" +
+            "  console.log(`Writing index file for \${api}.`);\n" +
+            "  console.log(`lib source \${apiRootDirectory} + '/' + \${api} + '/index.ts'`);\n" +
+            "  fs.writeFileSync(apiRootDirectory + '/' + api + '/index.ts', indexFileContent);\n" +
+            "});\n" +
+            "\n" +
+            "console.log(`Writing main index file.`);\n" +
+            "const moduleExports = folders.map(api => `export * from './lib/api/\${api}/';`).join('\\n');\n" +
+            "console.log(`lib source \${libSourceRootDirectory}`);\n" +
+            "fs.writeFileSync(libSourceRootDirectory + '/index.ts', moduleExports);\n"
+
+        def oldFile = file("./${projectName}/package.json")
+        println oldFile.getAbsoluteFile().toString()
+        def newFile = File.createTempFile("package.json", UUID.randomUUID().toString())
+
+        newFile.withWriter { output ->
+            oldFile.eachLine { line ->
+                if (line.contains("start-ui")) {
+                    output.write('\t"swagger-gen": "ng-swagger-gen --config ./libs/api/swagger-src/cms-api-config.json",\n')
+                    output.write('\t"generate-client-source": "node ./libs/api/build-tools/generate-client-source.js",\n')
+                    output.write('\t"update-exports": "node ./libs/api/build-tools/update-exports.js",\n')
+                    output.write('\t"prepublish": "npm run generate-client-source && npm run update-exports",\n')
+                }
+                output.write(line)
+                output.write("\n")
+            }
+        }
+
+
+        copy {
+            from(newFile.getAbsolutePath())
+            into(oldFile.getParentFile().getAbsolutePath())
+        }
+
+        oldFile.delete();
+        newFile.renameTo(oldFile);
+        newFile.delete();
+
+        mkdir "./${projectName}/libs/api/swagger-src/src"
+
+        file("./${projectName}/libs/api/swagger-src/api-config.json").text = "{\n" +
+            "  \"\$schema\": \"./node_modules/ng-swagger-gen/ng-swagger-gen-schema.json\",\n" +
+            "  \"swagger\": \"./libs/api/swagger-src/src/api.json\",\n" +
+            "  \"output\": \"./libs/api/src/lib/api/cms/\",\n" +
+            "  \"config\": \"cms-api.json\",\n" +
+            "  \"ignoreUnusedModels\": true,\n" +
+            "  \"minParamsForContainer\": 2,\n" +
+            "  \"defaultTag\": \"CmsApi\",\n" +
+            "  \"prefix\": \"CmsApi\",\n" +
+            "  \"removeStaleFiles\": true,\n" +
+            "  \"modelIndex\": true,\n" +
+            "  \"serviceIndex\": true,\n" +
+            "  \"apiModule\": true\n" +
+            "}\n"
+
+        file("./${projectName}/libs/api/swagger-src/src/api.json").text = "{\n" +
+            "  \"swagger\": \"2.0\",\n" +
+            "  \"info\": {\n" +
+            "    \"version\": \"1.0.0\",\n" +
+            "    \"title\": \"CMS\",\n" +
+            "    \"termsOfService\": \"http://www.discovery.co.za\",\n" +
+            "    \"license\": {\n" +
+            "      \"name\": \"Discovery Health\"\n" +
+            "    }\n" +
+            "  }\n" +
+            "}"
+    }
+}
+
+//Generate Project
+task bootStrapProject {
+    dependsOn(
+        'generateUiWorkspace',
+        'generateUiAddAngularLibrary',
+        'generateUiApiLibrary',
+        'generateUiWidgetLibrary',
+        'generateUiDashBoardLibrary',
+        'generateUiAddDevelopmentLibraries',
+        'generateUiAddRuntimeLibraries',
+        'generateUiProxyContent',
+        'generateUiSwaggerApiContent',
+        'generateSpringDashBoard'
+    )
+
+    tasks.findByName('generateUiAddAngularLibrary').mustRunAfter('generateUiWorkspace')
+    tasks.findByName('generateUiApiLibrary').mustRunAfter('generateUiAddAngularLibrary')
+    tasks.findByName('generateUiWidgetLibrary').mustRunAfter('generateUiApiLibrary')
+    tasks.findByName('generateUiDashBoardLibrary').mustRunAfter('generateUiWidgetLibrary')
+    tasks.findByName('generateUiAddDevelopmentLibraries').mustRunAfter('generateUiDashBoardLibrary')
+    tasks.findByName('generateUiAddRuntimeLibraries').mustRunAfter('generateUiAddDevelopmentLibraries')
+    tasks.findByName('generateUiProxyContent').mustRunAfter('generateUiAddDevelopmentLibraries')
+    tasks.findByName('generateUiSwaggerApiContent').mustRunAfter('generateUiProxyContent')
+    tasks.findByName('generateSpringDashBoard').mustRunAfter('generateUiSwaggerApiContent')
+}

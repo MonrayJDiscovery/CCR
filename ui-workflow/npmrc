@@ -1,0 +1,5 @@
+insecure=true
+strict-ssl=false
+rejectUnauthorized=false
+registry=http://dhpscnxsrm02.discsrv.co.za:8081/nexus/repository/npm-group/
+sass_binary_site=http://dhpscnxsrm02.discsrv.co.za:8081/nexus/repository/github/sass/node-sass/releases/download
